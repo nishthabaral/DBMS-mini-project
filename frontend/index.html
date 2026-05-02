@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Pharmacy Management System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>💊 Pharmacy Management System</h1>
+    </header>
+
+    <main>
+
+        <!-- Medicines -->
+        <section class="card">
+            <h2>Medicines</h2>
+
+            <div class="row">
+                <button onclick="getMedicines()">View Medicines</button>
+                <input type="text" id="searchInput" placeholder="Search medicine">
+                <div id="msgBox" class="msg"></div>
+                <button onclick="searchMedicine()">Search</button>
+            </div>
+
+            <div id="medicineContainer" class="table-box" style="display:none;">
+                <span class="close-btn" onclick="closeMedicine()">✖</span>
+                <div id="medicineTable"></div>
+            </div>
+
+            <h3>Add Medicine</h3>
+
+            <div class="grid">
+                <input id="medicine_id" placeholder="Medicine ID">
+                <input id="name" placeholder="Name">
+                <input id="price" type="number" placeholder="Price">
+                <input id="stock" type="number" placeholder="Stock">
+                <input id="expiry" type="date">
+                <input id="batch" placeholder="Batch Number">
+            </div>
+
+            <button class="primary" onclick="addMedicine()">Add Medicine</button>
+        </section>
+
+
+        <!-- Orders -->
+        <section class="card">
+            <h2>Orders</h2>
+
+            <div class="grid">
+                <input id="customer_id" placeholder="Customer ID">
+                <input id="order_date" type="date" required>
+            </div>
+
+            <button class="primary" onclick="placeOrder()">Place Order</button>
+
+            <br><br>
+            <button onclick="getOrders()">View Orders</button>
+
+            <div id="orderContainer" class="table-box" style="display:none;">
+                <span class="close-btn" onclick="closeOrders()">✖</span>
+                <div id="orderTable"></div>
+            </div>
+        </section>
+
+
+        <!-- Suppliers -->
+        <section class="card">
+            <h2>Suppliers</h2>
+
+            <button onclick="getSuppliers()">View Suppliers</button>
+            <div id="supplierContainer" class="table-box" style="display:none;">
+                <span class="close-btn" onclick="closeSuppliers()">✖</span>
+                <div id="supplierTable"></div>
+            </div>
+
+            <h3>Add Supplier</h3>
+
+            <div class="grid">
+                <input id="s_name" placeholder="Supplier Name">
+                <input id="s_contact" placeholder="Contact">
+            </div>
+
+            <button class="primary" onclick="addSupplier()">Add Supplier</button>
+        </section>
+
+    </main>
+
+    <script>
+        const BASE_URL = "http://localhost:3000";
+
+        /* ---------- TABLE ---------- */
+        function createTable(data) {
+            if (!data || data.length === 0) return "<p>No data found</p>";
+
+            let html = "<table><tr>";
+
+            // Headers
+            for (let key in data[0]) {
+                if (key !== "order_id") {
+                    html += `<th>${key}</th>`;
+                }
+            }
+
+            if ("order_id" in data[0]) {
+                html += "<th>Action</th>";
+            }
+
+            // Action column for suppliers
+            if ("supplier_id" in data[0] && !("medicine_id" in data[0])) {
+                html += "<th>Action</th>";
+            }
+
+            // Action column for orders
+            if ("order_id" in data[0]) {
+                html += "<th>Action</th>";
+            }
+
+            html += "</tr>";
+
+            // Rows
+            data.forEach(row => {
+                const isLow = row.stock_quantity && row.stock_quantity < 60;
+                html += `<tr class="${isLow ? 'low-stock' : ''}">`;
+
+                for (let key in row) {
+                    if (key !== "order_id") {
+                        html += `<td>${row[key]}</td>`;
+                    }
+                }
+
+                // Supplier action
+                if ("supplier_id" in row && !("medicine_id" in row)) {
+                    html += `<td>
+                <button class="danger" onclick="deleteSupplier(${row.supplier_id})">End Contract</button>
+            </td>`;
+                }
+
+                // Orders action (✔ + Cancel)
+                if ("order_id" in row) {
+                    html += `<td>
+                <span class="tick-btn" onclick="completeOrder(${row.order_id})">✔</span>
+                <button class="cancel-btn" onclick="deleteOrder(${row.order_id})">Cancel</button>
+            </td>`;
+                }
+
+                html += "</tr>";
+            });
+
+            html += "</table>";
+            return html;
+        }
+        /* ---------- API ---------- */
+
+        function getMedicines() {
+            fetch(`${BASE_URL}/medicines`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("medicineContainer").style.display = "block";  // 🔥 important
+                    document.getElementById("medicineTable").innerHTML = createTable(data);
+                });
+        }
+
+        function searchMedicine() {
+            const name = document.getElementById("searchInput").value.trim();
+
+            if (!name) {
+                showMessage("Enter value to search", "error");
+                return;
+            }
+
+            fetch(`${BASE_URL}/medicines/search?name=${name}`)
+                .then(res => res.json())
+                .then(data => {
+
+                    if (data.length === 0) {
+                        showMessage("No medicine found", "error");
+                        return;
+                    }
+
+                    document.getElementById("medicineContainer").style.display = "block";
+                    document.getElementById("medicineTable").innerHTML = createTable(data);
+                });
+        }
+
+        function addMedicine() {
+            const medicine_id = document.getElementById("medicine_id").value;
+            const name = document.getElementById("name").value;
+            const price = document.getElementById("price").value;
+            const stock = document.getElementById("stock").value;
+            const expiry = document.getElementById("expiry").value;
+            const batch = document.getElementById("batch").value;
+
+            if (!medicine_id || !name || !price || !stock || !expiry || !batch) {
+                showMessage("Fill all fields", "error");
+                return;
+            }
+
+            fetch(`${BASE_URL}/medicines/add`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    medicine_id,
+                    name,
+                    price,
+                    stock_quantity: stock,
+                    expiry_date: expiry,
+                    batch_number: batch
+                })
+            })
+                .then(async res => {
+                    const text = await res.text();
+                    if (!res.ok) throw new Error(text);
+                    return text;
+                })
+
+                .then(msg => {
+                    showMessage(msg, "success");
+                    getMedicines();
+                })
+                .catch(err => {
+                    const msg = err.message || "";
+                    if (msg.includes("Duplicate entry")) {
+                        showMessage("Medicine ID already exists", "error");
+                    } else {
+                        showMessage("Error adding medicine", "error");
+                    }
+                });
+        }
+
+        function closeMedicine() {
+            document.getElementById("medicineContainer").style.display = "none";
+        }
+
+        function closeOrders() {
+            document.getElementById("orderContainer").style.display = "none";
+        }
+
+        function closeSuppliers() {
+            document.getElementById("supplierContainer").style.display = "none";
+        }
+
+        function addSupplier() {
+    const name = document.getElementById("s_name").value.trim();
+    const contact = document.getElementById("s_contact").value.trim();
+
+    if (!name || !contact) {
+        showMessage("Enter all fields", "error");
+        return;
+    }
+
+    fetch(`${BASE_URL}/suppliers/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name: name,
+            contact_number: contact
+        })
+    })
+    .then(res => res.text())
+    .then(msg => {
+        showMessage(msg, "success");
+        getSuppliers();
+    })
+    .catch(() => showMessage("Error adding supplier", "error"));
+}
+
+        function deleteSupplier(id) {
+            fetch(`${BASE_URL}/suppliers/delete/${id}`, { method: "DELETE" })
+                .then(msg => {
+                    showMessage(msg, "success");
+                    getSuppliers();
+                })
+                .catch(() => showMessage("Cannot delete supplier (in use)", "error"));
+        }
+
+        function getSuppliers() {
+            fetch(`${BASE_URL}/suppliers`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("supplierContainer").style.display = "block";
+                    document.getElementById("supplierTable").innerHTML = createTable(data);
+                });
+        }
+
+        function placeOrder() {
+            const customer_id = document.getElementById("customer_id").value;
+
+            if (!customer_id) {
+                showMessage("Fill all fields", "error");
+                return;
+            }
+
+            fetch(`${BASE_URL}/orders/add`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    customer_id: parseInt(customer_id)   // 🔥 MUST be number
+                })
+            })
+                .then(res => res.text())
+                .then(msg => {
+                    showMessage(msg, "success");
+                    getOrders();
+                })
+                .catch(err => {
+                    console.error(err);
+                    showMessage("Error placing order", "error");
+                });
+        }
+        function completeOrder(id) {
+            fetch(`${BASE_URL}/orders/complete/${id}`, {
+                method: "PUT"
+            })
+                .then(res => res.text())
+                .then(() => {
+                    showMessage("Order placed", "success");
+                    getOrders();
+                })
+                .catch(() => showMessage("Error completing order", "error"));
+        }
+
+        // delete order
+        function deleteOrder(id) {
+            fetch(`${BASE_URL}/orders/delete/${id}`, {
+                method: "DELETE"
+            })
+                .then(res => res.text())
+                .then(() => {
+                    showMessage("Order cancelled", "success");
+                    getOrders();
+                })
+                .catch(() => showMessage("Error cancelling order", "error"));
+        }
+
+
+        //ensures no crash
+        function getOrders() {
+            fetch(`${BASE_URL}/orders`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("orderContainer").style.display = "block";
+                    document.getElementById("orderTable").innerHTML = createTable(data);
+                })
+                .catch(err => {
+                    console.error(err);
+                    showMessage("Error loading orders", "error");
+                });
+        }
+
+        // Js helper
+        function showMessage(text, type) {
+            const box = document.getElementById("msgBox");
+            box.innerText = text;
+            box.className = "msg " + type;
+            box.style.display = "block";
+
+            setTimeout(() => {
+                box.style.display = "none";
+            }, 3000);
+        }
+
+    </script>
+
+</body>
+
+</html>
