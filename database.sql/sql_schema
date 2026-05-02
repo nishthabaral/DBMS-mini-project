@@ -1,0 +1,202 @@
+CREATE DATABASE pharmacy_db;
+USE pharmacy_db;
+
+# DDL
+
+CREATE TABLE Supplier (
+    supplier_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    contact_number VARCHAR(15)
+);
+
+CREATE TABLE Customer (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(15)
+);
+
+CREATE TABLE Medicine (
+    medicine_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock_quantity INT NOT NULL CHECK (stock_quantity >= 0),
+    expiry_date DATE NOT NULL,
+    batch_number VARCHAR(50),
+    supplier_id INT,
+    FOREIGN KEY (supplier_id) REFERENCES Supplier(supplier_id)
+);
+
+CREATE TABLE Orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES Customer(customer_id)
+);
+
+CREATE TABLE Order_Items (
+    order_item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT,
+    medicine_id INT,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id),
+    FOREIGN KEY (medicine_id) REFERENCES Medicine(medicine_id)
+);
+
+SHOW TABLES;
+
+# DML 
+
+INSERT INTO Supplier (name, contact_number) VALUES
+('ABC Pharma', '9876543210'),
+('MediSupply Ltd', '9123456780'),
+('HealthCorp', '9988776655');
+
+INSERT INTO Customer (name, phone) VALUES
+('Rahul Singh','9000000001'),
+('Priya Sharma','9000000002'),
+('Amit Verma','9000000003'),
+('Neha Gupta','9000000004'),
+('Rohan Mehta','9000000005'),
+('Ananya Iyer','9000000006'),
+('Karan Patel','9000000007'),
+('Sneha Reddy','9000000008'),
+('Arjun Nair','9000000009'),
+('Pooja Kapoor','9000000010');
+
+INSERT INTO Medicine (name, price, stock_quantity, expiry_date, batch_number, supplier_id) VALUES
+('Paracetamol', 50.00, 100, '2026-12-31', 'B001', 1),
+('Ibuprofen', 80.00, 80, '2025-10-15', 'B002', 2),
+('Amoxicillin', 120.00, 60, '2026-05-20', 'B003', 1),
+('Cough Syrup', 90.00, 50, '2025-08-10', 'B004', 3),
+('Vitamin C', 40.00, 150, '2027-01-01', 'B005', 2);
+
+INSERT INTO Orders (customer_id) VALUES
+(1),
+(2),
+(3);
+
+INSERT INTO Order_Items (order_id, medicine_id, quantity) VALUES
+(1, 1, 2),
+(1, 3, 1),
+(2, 2, 3),
+(2, 5, 2),
+(3, 1, 1),
+(3, 4, 2);
+
+# Complex queries
+# 1. View All Orders with Customer Name
+SELECT o.order_id, c.name AS customer_name, o.order_date
+FROM Orders o
+JOIN Customer c ON o.customer_id = c.customer_id;
+
+# 2. View Order Details (Medicines per Order)
+SELECT o.order_id, m.name AS medicine_name, oi.quantity
+FROM Order_Items oi
+JOIN Orders o ON oi.order_id = o.order_id
+JOIN Medicine m ON oi.medicine_id = m.medicine_id;
+
+# 3. Total Bill per Order
+SELECT o.order_id, SUM(m.price * oi.quantity) AS total_amount
+FROM Order_Items oi
+JOIN Orders o ON oi.order_id = o.order_id
+JOIN Medicine m ON oi.medicine_id = m.medicine_id
+GROUP BY o.order_id;
+
+# Low Stock Medicines
+SELECT name, stock_quantity
+FROM Medicine
+WHERE stock_quantity < 60;
+
+# Top Selling Medicines
+SELECT m.name, SUM(oi.quantity) AS total_sold
+FROM Order_Items oi
+JOIN Medicine m ON oi.medicine_id = m.medicine_id
+GROUP BY m.name
+ORDER BY total_sold DESC;
+
+# Supplier-wise Medicine Count
+SELECT s.name AS supplier_name, COUNT(m.medicine_id) AS total_medicines
+FROM Supplier s
+JOIN Medicine m ON s.supplier_id = m.supplier_id
+GROUP BY s.name;
+
+# Triggers
+
+# Creating Triggers
+DELIMITER $$
+
+CREATE TRIGGER update_stock_after_order
+AFTER INSERT ON Order_Items
+FOR EACH ROW
+BEGIN
+    UPDATE Medicine
+    SET stock_quantity = stock_quantity - NEW.quantity
+    WHERE medicine_id = NEW.medicine_id;
+END$$
+
+DELIMITER ;
+
+# Testing Triggers
+
+# Check stock before
+SELECT * FROM Medicine WHERE medicine_id = 1;
+
+# Insert new order item
+INSERT INTO Order_Items (order_id, medicine_id, quantity)
+VALUES (1, 1, 5);
+
+# Check stock again
+SELECT * FROM Medicine WHERE medicine_id = 1;
+
+ALTER TABLE Orders ADD status VARCHAR(20) DEFAULT 'Pending';
+
+FLUSH PRIVILEGES;
+
+# changes
+
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'root123';
+
+ALTER TABLE Medicine MODIFY medicine_id INT;
+
+SHOW CREATE TABLE Order_Items;
+ALTER TABLE Order_Items DROP FOREIGN KEY order_items_ibfk_2;
+ALTER TABLE Medicine MODIFY medicine_id INT;
+
+ALTER TABLE Medicine DROP PRIMARY KEY;
+ALTER TABLE Medicine ADD PRIMARY KEY (medicine_id);
+
+ALTER TABLE Order_Items
+ADD CONSTRAINT order_items_ibfk_2
+FOREIGN KEY (medicine_id)
+REFERENCES Medicine(medicine_id);
+
+INSERT INTO Customer (name, phone)
+VALUES ('New Customer', '9999999999');
+
+SELECT supplier_id FROM Supplier;
+
+DESCRIBE Medicine;
+
+# count of the duplicate
+SELECT customer_id, order_date, COUNT(*) 
+FROM Orders
+GROUP BY customer_id, order_date
+HAVING COUNT(*) > 1;
+
+# safe update mode
+SET SQL_SAFE_UPDATES = 0;
+SET SQL_SAFE_UPDATES = 1;
+
+# keep latest order, remove old
+DELETE o1 FROM Orders o1
+JOIN Orders o2 
+ON o1.customer_id = o2.customer_id 
+AND o1.order_date = o2.order_date
+AND o1.order_id > o2.order_id;
+
+# adding constarint
+
+SELECT * FROM Customer;
+
+INSERT INTO Customer (name, phone)
+VALUES ('New Person', '9999999999');
